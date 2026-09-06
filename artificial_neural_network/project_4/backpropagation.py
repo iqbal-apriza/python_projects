@@ -169,6 +169,37 @@ class Layer:
             self.__neurons[i].set_init_bias(new_bias)
 
 
+    def set_weights(self, weights):
+        weight_rows = weights.shape[0]
+        weight_cols = weights.shape[1]
+
+        if weight_rows != self.__num_neuron:
+            raise ValueError(f"[Layer {self.__id}] Weight rows must be the same as number of neurons\n"
+                             f"Given Weight Rows\t: {weight_rows}\n"
+                             f"Number of Neurons\t: {self.__num_neuron}\n")
+
+        if weight_cols != self.__num_input:
+            raise ValueError(f"[Layer {self.__id}] Weight cols must be the same as number of inputs\n"
+                             f"Given Weight Cols\t: {weight_cols}\n"
+                             f"Number of Inputs\t: {self.__num_input}\n")
+
+        for i in range(self.__num_neuron):
+            self.__neurons[i].set_init_weight(weights[i])
+
+
+    def set_bias(self, biases):
+        bias_len = biases.shape[0]
+
+        if bias_len != self.__num_neuron:
+            raise ValueError(f"[Layer {self.__id}] Bias dimension must be the same as number of neurons\n"
+                             f"Given Bias Length\t: {bias_len}\n"
+                             f"Number of Neurons\t: {self.__num_neuron}\n")
+
+        for i in range(self.__num_neuron):
+            self.__neurons[i].set_init_bias(biases[i])
+
+
+
     def forward_prop(self, input):
         input_len = len(input)
 
