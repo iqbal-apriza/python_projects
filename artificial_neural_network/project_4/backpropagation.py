@@ -58,11 +58,13 @@ def show_data(input, target, output):
 
     for i in range(input_row):
         for j in range(input_col):
-            print(f"{input[i][j]:>8}", end="")
+            input_round = round(input[i][j], 3)
+            print(f"{input_round:>8}", end="")
 
+        target_round = round(target[i], 3)
         output_round = round(output[i], 3)
 
-        print(f"{target[i]:>8}"
+        print(f"{target_round:>8}"
               f"{output_round:>8}")
 
     print("")
@@ -146,6 +148,27 @@ class Layer:
         self.__neurons = [Neuron(num_input) for _ in range(num_neuron)]
 
 
+    def nguyen_widrow_init(self):
+        scale_factor = 0.7 * np.pow(self.__num_neuron, 1 / self.__num_input)
+        old_weights = np.random.uniform(low=-0.5, high=0.5, size=self.__num_input)
+
+        sum = 0
+        for i in range(self.__num_input):
+            sum += old_weights[i] ** 2
+
+        old_weights_abs = np.sqrt(sum)
+
+        for i in range(self.__num_neuron):
+            new_weights = np.zeros(self.__num_input)
+            new_bias = np.random.uniform(low=-scale_factor, high=scale_factor)
+
+            for j in range(self.__num_input):
+                new_weights[j] = scale_factor * old_weights[j] / old_weights_abs
+
+            self.__neurons[i].set_init_weight(new_weights)
+            self.__neurons[i].set_init_bias(new_bias)
+
+
     def forward_prop(self, input):
         input_len = len(input)
 
@@ -211,6 +234,24 @@ class Layer:
         print()
 
 
+    def export_weights(self, file_dir):
+        file_dir = Path(file_dir)
+
+        output_dir = file_dir / f"layer_{self.__id}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        weights = [[] for _ in range(self.__num_neuron)]
+        biases = np.zeros(self.__num_neuron)
+        for i in range(self.__num_neuron):
+            weights[i] = self.__neurons[i].get_weights()
+            biases[i] = self.__neurons[i].get_bias()
+
+        weights = np.array(weights)
+
+        np.save(output_dir / "weights.npy", weights)
+        np.save(output_dir / "biases.npy", biases)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Python program for Backpropagation Algorithm in ANN subject")
     ap.add_argument("--dataset", required=True, type=str, help="Dataset file and config in yaml")
@@ -244,6 +285,7 @@ def main():
     for i in range(num_layer):
         if i == 0:
             layers[i] = Layer(num_neurons[i], input_col, i)
+            layers[i].nguyen_widrow_init()
 
         elif i == num_layer - 1:
             layers[i] = Layer(1, num_neurons[i-1], i)
