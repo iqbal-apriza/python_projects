@@ -1,0 +1,6 @@
+dataset: "rainfall_dataset.csv"
+alpha: 0.9
+mu: 0.5
+max_epoch: 100000
+num_layer: 2
+num_neurons: [6, 1]
