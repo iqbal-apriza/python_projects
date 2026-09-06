@@ -74,6 +74,9 @@ class Neuron:
         self.__weights = np.random.uniform(low=-0.5, high=0.5, size=num_input)
         self.__bias = np.random.uniform(low=-0.5, high=0.5)
 
+        self.__prev_weights = np.zeros(num_input)
+        self.__prev_bias = 0.0
+
 
     def set_init_weight(self, val):
         if len(val) != self.__num_input:
@@ -115,7 +118,7 @@ class Neuron:
         return self.recent_derr
 
 
-    def update_weight(self, alpha, input):
+    def update_weight(self, alpha, input, mu=0.0):
         input_len = len(input)
 
         if input_len != self.__num_input:
@@ -123,7 +126,15 @@ class Neuron:
 
         for i in range(self.__num_input):
             d_w = alpha * self.recent_derr * input[i]
+
+            d_w += mu * (self.__weights[i] - self.__prev_weights[i])
+            self.__prev_weights[i] = self.__weights[i]
+
             self.__weights[i] += d_w
+
+    def update_bias(self, alpha, mu=0.0):
+        d_b = alpha * self.recent_derr
+        self.__bias += d_b
 
 
 class Layer:
@@ -148,7 +159,7 @@ class Layer:
         return net_output
 
 
-    def back_prop(self, error, alpha, input):
+    def back_prop(self, error, alpha, input, mu=0.0):
         d_err = np.zeros(self.__num_neuron)
         for i in range(self.__num_neuron):
             d_err[i] = self.__neurons[i].get_derror(error[i])
@@ -166,7 +177,8 @@ class Layer:
             d_net[i] = sum
 
         for i in range(self.__num_neuron):
-            self.__neurons[i].update_weight(alpha, input)
+            self.__neurons[i].update_weight(alpha, input, mu)
+            self.__neurons[i].update_bias(alpha)
 
         return d_net
 
@@ -203,6 +215,7 @@ def main():
     ap = argparse.ArgumentParser(description="Python program for Backpropagation Algorithm in ANN subject")
     ap.add_argument("--dataset", required=True, type=str, help="Dataset file and config in yaml")
     ap.add_argument("--alpha", default=0.1, type=float, help="Learning rate. The value between 0 - 1")
+    ap.add_argument("--mu", default=0.0, type=float, help="Momentum coefficient for updating weights")
     ap.add_argument("--max-epoch", type=int, help="Maximum epoch to stop train")
     ap.add_argument("--min-err", default=0.1, type=float, help="Minimum error to stop the train")
 
@@ -220,6 +233,7 @@ def main():
         raise ValueError("Number of neurons in array must be the same as number of layers")
 
     alpha = yaml_data.get("alpha", args.alpha)
+    mu = yaml_data.get("mu", args.mu)
     min_error = yaml_data.get("min_error", args.min_err)
     max_epoch = yaml_data.get("max_epoch", args.max_epoch)
 
@@ -277,13 +291,13 @@ def main():
                     rev_count = num_layer - j
 
                     if j == 0:
-                        backprop_err[j] = layers[rev_count - 1].back_prop(np.array([error[i]]), alpha, net_out[rev_count - 2])
+                        backprop_err[j] = layers[rev_count - 1].back_prop(np.array([error[i]]), alpha, net_out[rev_count - 2], mu)
 
                     elif j == num_layer - 1:
-                        backprop_err[j] = layers[rev_count - 1].back_prop(backprop_err[j-1], alpha, data_in[i])
+                        backprop_err[j] = layers[rev_count - 1].back_prop(backprop_err[j-1], alpha, data_in[i], mu)
 
                     else:
-                        backprop_err[j] = layers[rev_count - 1].back_prop(backprop_err[j-1], alpha, net_out[rev_count - 2])
+                        backprop_err[j] = layers[rev_count - 1].back_prop(backprop_err[j-1], alpha, net_out[rev_count - 2], mu)
                         
             mse = evaluate(error)
             print(f"\033[2K\rEpoch to {epochs}\n"
