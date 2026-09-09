@@ -7,9 +7,13 @@ import yaml
 from pathlib import Path
 
 import sys
-import select
-import termios
-import tty
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import select
+    import termios
+    import tty
 
 from project_4 import backpropagation as nn
 
@@ -83,8 +87,9 @@ def main():
     mse_acc = []
     epochs_acc = []
 
-    old_settings = termios.tcgetattr(sys.stdin)
-    tty.setcbreak(sys.stdin.fileno())
+    if sys.platform != "win32":
+        old_settings = termios.tcgetattr(sys.stdin)
+        tty.setcbreak(sys.stdin.fileno())
 
     print("\nTraining the data. Press <q> to stop the training process")
 
@@ -92,11 +97,10 @@ def main():
 
     try:
         while True:
-            if select.select([sys.stdin], [], [], 0)[0]:
-                key = sys.stdin.read(1)
+            key = nn.check_keyboard()
 
-                if key.lower() == 'q':
-                    stop_train = True
+            if key is not None and key.lower() == 'q':
+                stop_train = True
 
             epochs += 1
 
@@ -151,7 +155,8 @@ def main():
                     print("\033[3A", end="")
 
     finally:
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        if sys.platform != "win32":
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
     print("\n\n====================================\n"
             "            FINAL RESULT            \n"

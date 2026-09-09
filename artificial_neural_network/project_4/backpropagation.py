@@ -6,9 +6,13 @@ import yaml
 from pathlib import Path
 
 import sys
-import select
-import termios
-import tty
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import select
+    import termios
+    import tty
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -29,6 +33,18 @@ def evaluate(error):
     mse = np.sum(err_sqrt) / len(error)
 
     return mse
+
+
+def check_keyboard():
+    if sys.platform == "win32":
+        if msvcrt.kbhit():
+            return msvcrt.getwch()
+        return None
+
+    else:
+        if select.select([sys.stdin], [], [], 0)[0]:
+            return sys.stdin.read(1)
+        return None
 
 
 def is_save(epoch):
@@ -328,8 +344,9 @@ def main():
     mse_acc = []
     epochs_acc = []
 
-    old_settings = termios.tcgetattr(sys.stdin)
-    tty.setcbreak(sys.stdin.fileno())
+    if sys.platform != "win32":
+        old_settings = termios.tcgetattr(sys.stdin)
+        tty.setcbreak(sys.stdin.fileno())
 
     print("\nTraining the data. Press <q> to stop the training process")
 
@@ -337,11 +354,10 @@ def main():
 
     try:
         while True:
-            if select.select([sys.stdin], [], [], 0)[0]:
-                key = sys.stdin.read(1)
+            key = check_keyboard()
 
-                if key.lower() == 'q':
-                    stop_train = True
+            if key is not None and key.lower() == 'q':
+                stop_train = True
 
             epochs += 1
 
@@ -396,7 +412,8 @@ def main():
                     print("\033[3A", end="")
 
     finally:
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        if sys.platform != "win32":
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
     print("\n\n====================================\n"
           "            FINAL RESULT            \n"
