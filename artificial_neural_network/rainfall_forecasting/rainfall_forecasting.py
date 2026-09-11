@@ -5,8 +5,8 @@ import argparse
 import yaml
 from pathlib import Path
 
-from project_4 import backpropagation as nn
-from project_5 import rainfall_training as tr
+from backpropagation import backpropagation as nn
+from rainfall_forecasting import rainfall_training as tr
 
 BASE_DIR = Path(__file__).resolve().parent
 

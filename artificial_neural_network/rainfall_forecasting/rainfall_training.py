@@ -15,7 +15,7 @@ else:
     import termios
     import tty
 
-from project_4 import backpropagation as nn
+from backpropagation import backpropagation as nn
 
 BASE_DIR = Path(__file__).resolve().parent
 
