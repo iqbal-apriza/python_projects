@@ -110,20 +110,20 @@ def main():
           f"Layer\t\t: {new_width} x {new_height}\n"
           f"Position\t: ({x}, {y})\n\n")
 
-    virtual_cam = subprocess.Popen([
-        "ffmpeg",
-        "-loglevel", "error",
+    # virtual_cam = subprocess.Popen([
+    #     "ffmpeg",
+    #     "-loglevel", "error",
 
-        "-f", "rawvideo",
-        "-pix_fmt", "bgr24",
-        "-video_size", f"{CANVAS_WIDTH}x{CANVAS_HEIGHT}",
-        "-framerate", "30",
-        "-i", "-",
+    #     "-f", "rawvideo",
+    #     "-pix_fmt", "bgr24",
+    #     "-video_size", f"{CANVAS_WIDTH}x{CANVAS_HEIGHT}",
+    #     "-framerate", "30",
+    #     "-i", "-",
 
-        "-pix_fmt", "yuv420p",
-        "-f", "v4l2",
-        "/dev/video2"
-    ], stdin=subprocess.PIPE)
+    #     "-pix_fmt", "yuv420p",
+    #     "-f", "v4l2",
+    #     "/dev/video2"
+    # ], stdin=subprocess.PIPE)
 
     try:
         with mp_selfie_segmentation.SelfieSegmentation(model_selection = 1) as selfie_segmentation:
@@ -145,18 +145,21 @@ def main():
 
                 t2 = time.perf_counter()
                 camera = cv2.cvtColor(camera, cv2.COLOR_RGB2BGR)
-                camera = cv2.resize(camera, (new_width, new_height))
-                mask = cv2.resize(results.segmentation_mask, (new_width, new_height))
+
+                mask = results.segmentation_mask
+                # camera = cv2.resize(camera, (new_width, new_height))
+                # mask = cv2.resize(results.segmentation_mask, (new_width, new_height))
 
                 t3 = time.perf_counter()
-                mask_binary = (mask > 0.1).astype(np.uint8) * 255
+                mask_binary = (mask > 0.7).astype(np.uint8) * 255
                 t31 = time.perf_counter()
 
                 if bg_image is None:
                     bg_image = np.zeros(camera.shape, dtype=np.uint8)
                     bg_image[:] = BG_COLOR
 
-                output_image = bg_image.copy()
+                blurred_frame = cv2.GaussianBlur(camera, (31, 31), 0)
+                output_image = blurred_frame.copy()
                 t32 = time.perf_counter()
 
                 roi = output_image[
@@ -165,7 +168,7 @@ def main():
                 ]
                 t33 = time.perf_counter()
 
-                cv2.copyTo(camera, mask_binary, roi)
+                cv2.copyTo(camera, mask_binary, output_image)
 
                 t4 = time.perf_counter()
                 preprocessing_ms = (t1 - t0) * 1000
@@ -192,8 +195,8 @@ def main():
                     f"Total        : {total_ms:.2f}\n"
                 )
 
-                virtual_cam.stdin.write(output_image.tobytes())
-                # cv2.imshow('MediaPipe Selfie Segmentation', output_image)
+                # virtual_cam.stdin.write(output_image.tobytes())
+                cv2.imshow('MediaPipe Selfie Segmentation', output_image)
                 if cv2.waitKey(5) & 0xFF == 27:
                     break
 
@@ -207,8 +210,8 @@ def main():
         cap.release()
         cv2.destroyAllWindows()
 
-        virtual_cam.stdin.close()
-        virtual_cam.wait()
+        # virtual_cam.stdin.close()
+        # virtual_cam.wait()
 
 
 if __name__ == '__main__':
