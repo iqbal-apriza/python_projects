@@ -222,5 +222,166 @@ def main():
     cv2.destroyAllWindows()
 
 
+def main_alpha_only():
+    bg_image = load_background(BG_PATH, CANVAS_WIDTH, CANVAS_HEIGHT)
+    prev_t = time.perf_counter()
+
+    success, camera = cap.read()
+    if not success:
+        raise RuntimeError("Cannot read camera frame")
+
+    cam_height, cam_width = camera.shape[:2]
+    new_width, new_height, x, y = calculate_contain(
+        cam_width,
+        cam_height,
+        CANVAS_WIDTH,
+        CANVAS_HEIGHT
+    )
+
+    print(
+        f"\n\nCamera\t\t: {cam_width} x {cam_height}\n"
+        f"Layer\t\t: {new_width} x {new_height}\n"
+        f"Position\t: ({x}, {y})\n\n"
+    )
+
+    with mp_selfie_segmentation.SelfieSegmentation(
+        model_selection=1
+    ) as selfie_segmentation:
+
+        bg_image = load_background(BG_PATH)
+        cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)
+
+        background_weight = np.empty(
+            (new_height, new_width),
+            dtype=np.float32
+        )
+
+        while cap.isOpened():
+            success, camera = cap.read()
+
+            if not success:
+                print("Ignoring empty camera frame")
+                continue
+
+            t0 = time.perf_counter()
+
+            camera = cv2.cvtColor(
+                cv2.flip(camera, 1),
+                cv2.COLOR_BGR2RGB
+            )
+
+            t1 = time.perf_counter()
+
+            camera.flags.writeable = False
+            results = selfie_segmentation.process(camera)
+            camera.flags.writeable = True
+
+            t2 = time.perf_counter()
+
+            camera = cv2.cvtColor(
+                camera,
+                cv2.COLOR_RGB2BGR
+            )
+
+            t3 = time.perf_counter()
+
+            camera = cv2.resize(
+                camera,
+                (new_width, new_height)
+            )
+
+            t4 = time.perf_counter()
+
+            mask = cv2.resize(
+                results.segmentation_mask,
+                (new_width, new_height),
+                interpolation=cv2.INTER_LINEAR
+            )
+
+            t5 = time.perf_counter()
+
+            if bg_image is None:
+                bg_image = np.zeros(
+                    camera.shape,
+                    dtype=np.uint8
+                )
+                bg_image[:] = BG_COLOR
+
+            output_image = bg_image.copy()
+
+            t6 = time.perf_counter()
+
+            roi = output_image[
+                y:y + camera.shape[0],
+                x:x + camera.shape[1]
+            ]
+
+            t7 = time.perf_counter()
+
+            foreground_weight = mask
+
+            np.subtract(
+                1.0,
+                mask,
+                out=background_weight
+            )
+
+            t8 = time.perf_counter()
+
+            blended = cv2.blendLinear(
+                camera,
+                roi,
+                foreground_weight,
+                background_weight
+            )
+
+            t9 = time.perf_counter()
+
+            roi[:] = blended
+
+            t10 = time.perf_counter()
+
+            preprocessing_ms = (t1 - t0) * 1000
+            mediapipe_ms = (t2 - t1) * 1000
+            cvt_color = (t3 - t2) * 1000
+            cam_resize = (t4 - t3) * 1000
+            mask_resize_ms = (t5 - t4) * 1000
+            image_copy_ms = (t6 - t5) * 1000
+            roi_ms = (t7 - t6) * 1000
+            weight_ms = (t8 - t7) * 1000
+            blend_ms = (t9 - t8) * 1000
+            assign_ms = (t10 - t9) * 1000
+
+            total_ms = (t10 - t0) * 1000
+
+            print(
+                f"Preprocessing : {preprocessing_ms:.2f} ms\n"
+                f"MediaPipe     : {mediapipe_ms:.2f} ms\n"
+                f"Cam cvt color : {cvt_color:.2f} ms\n"
+                f"Cam resize    : {cam_resize:.2f} ms\n"
+                f"Mask resize   : {mask_resize_ms:.2f} ms\n"
+                f"Image copy    : {image_copy_ms:.2f} ms\n"
+                f"ROI           : {roi_ms:.2f} ms\n"
+                f"Weight        : {weight_ms:.2f} ms\n"
+                f"Blend         : {blend_ms:.2f} ms\n"
+                f"Assignment    : {assign_ms:.2f} ms\n"
+                f"Total         : {total_ms:.2f} ms\n"
+            )
+
+            cv2.imshow("Camera", output_image)
+
+            if cv2.waitKey(5) & 0xFF == 27:
+                break
+
+            curr_t = time.perf_counter()
+            fps = 1 / (curr_t - prev_t)
+            prev_t = curr_t
+
+            print(f"FPS: {fps:.2f}\n\n")
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
 if __name__ == '__main__':
     main()
