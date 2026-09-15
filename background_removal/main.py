@@ -5,21 +5,14 @@ import time
 import subprocess
 
 from pathlib import Path
+import camera_handler as ch
+import argparse
 
 mp_drawing = mp.solutions.drawing_utils
 mp_selfie_segmentation = mp.solutions.selfie_segmentation
 
 BASE_DIR = Path(__file__).resolve().parent
-
 BG_COLOR = (192, 192, 192)
-
-BG_FILENAME = "Home.png"
-BG_PATH = BASE_DIR / "backgrounds" / BG_FILENAME
-
-CANVAS_WIDTH = 1920
-CANVAS_HEIGHT = 1080
-
-cap = cv2.VideoCapture(0)
 
 
 def load_background(path, width=1920, height=1080):
@@ -97,15 +90,55 @@ def calculate_contain(image_width, image_height, target_width, target_height):
 
 
 def main():
-    bg_image = load_background(BG_PATH, CANVAS_WIDTH, CANVAS_HEIGHT)
-    prev_t = time.perf_counter()
+    ap = argparse.ArgumentParser(description="Virtual Background for replacing background virtually with image or blur the background")
+    ap.add_argument("--list-devices", action="store_true", help="Show all available devices")
+    ap.add_argument("--input-device", default=0, type=int, help="Webcam input device. Use --list-devices to list all available devices")
+    ap.add_argument("--output-device", default=0, type=int, help="Virtual webcam device to show the output video. Use --list-device to list all available devices")
+    ap.add_argument("--background", type=str, help="Background image to be placed or use blur to blur the background")
+    ap.add_argument("--smoothing", type=str, help="Smoothing the segmentation result. This may increase CPU consumption. Use alpha or alpha-temporal")
+    ap.add_argument("--canvas-dim", default="1920x1080", type=str, help="Canvas dimension. For example 1920x1080")
+    ap.add_argument("--show-debug", action="store_true")
+    ap.add_argument("--show-fps", action="store_true")
+    ap.add_argument("--show-image", action="store_true")
+
+    args = ap.parse_args()
+
+    input_devices, output_devices = ch.list_cameras()
+    if args.list_devices:
+        ch.print_devices(input_devices, output_devices)
+        return
+
+    canvas_dim = args.canvas_dim
+    if canvas_dim:
+        canvas_width, canvas_height = canvas_dim.split("x")
+
+        canvas_width = int(canvas_width)
+        canvas_height = int(canvas_height)
+
+    input_dev = ch.get_video_device(input_devices, args.input_device)
+    output_dev = ch.get_video_device(output_devices, args.output_device)
+
+    cap = cv2.VideoCapture(input_dev)
 
     success, camera = cap.read()
     if not success:
         raise RuntimeError("Cannot read camera frame")
 
     cam_height, cam_width = camera.shape[:2]
-    new_width, new_height, x, y = calculate_contain(cam_width, cam_height, CANVAS_WIDTH, CANVAS_HEIGHT)
+
+    bg_image = None
+    if args.background:
+        if args.background != "blur":
+            filename = args.background
+            bg_path = BASE_DIR / "backgrounds" / filename
+            bg_image = load_background(bg_path, canvas_width, canvas_height)
+
+        else:
+            bg_image = "blur"
+            canvas_width = cam_width
+            canvas_height = cam_height
+
+    new_width, new_height, x, y = calculate_contain(cam_width, cam_height, canvas_width, canvas_height)
     print(f"\n\nCamera\t\t: {cam_width} x {cam_height}\n"
           f"Layer\t\t: {new_width} x {new_height}\n"
           f"Position\t: ({x}, {y})\n\n")
@@ -116,18 +149,34 @@ def main():
 
         "-f", "rawvideo",
         "-pix_fmt", "bgr24",
-        "-video_size", f"{CANVAS_WIDTH}x{CANVAS_HEIGHT}",
+        "-video_size", f"{canvas_width}x{canvas_height}",
         "-framerate", "30",
         "-i", "-",
 
         "-pix_fmt", "yuv420p",
         "-f", "v4l2",
-        "/dev/video2"
+        f"{output_dev}"
     ], stdin=subprocess.PIPE)
 
+    prev_t = time.perf_counter()
+
     try:
+        if args.show_image:
+            cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)
+            
         with mp_selfie_segmentation.SelfieSegmentation(model_selection = 1) as selfie_segmentation:
-            bg_image = load_background(BG_PATH)
+            smoothing = None
+            if args.smoothing == "alpha":
+                smoothing = 1
+                prev_mask = None
+                background_weight = np.empty((new_height, new_width), dtype=np.float32)
+                
+            elif args.smoothing == "alpha-temporal":
+                smoothing = 2
+                prev_mask = None
+                background_weight = np.empty((new_height, new_width), dtype=np.float32)
+                smoothed_mask = np.empty((new_height, new_width), dtype=np.float32)
+                temporal_alpha = 0.4
 
             while cap.isOpened():
                 success, camera = cap.read()
@@ -135,73 +184,81 @@ def main():
                     print("Ignoring empty camera frame")
                     continue
 
-                t0 = time.perf_counter()
                 camera = cv2.cvtColor(cv2.flip(camera, 1), cv2.COLOR_BGR2RGB)
 
-                t1 = time.perf_counter()
                 camera.flags.writeable = False
                 results = selfie_segmentation.process(camera)
                 camera.flags.writeable = True
 
-                t2 = time.perf_counter()
                 camera = cv2.cvtColor(camera, cv2.COLOR_RGB2BGR)
-                camera = cv2.resize(camera, (new_width, new_height))
-                mask = cv2.resize(results.segmentation_mask, (new_width, new_height))
+                mask = results.segmentation_mask
 
-                t3 = time.perf_counter()
-                mask_binary = (mask > 0.1).astype(np.uint8) * 255
-                t31 = time.perf_counter()
+                if args.background != "blur":
+                    camera = cv2.resize(camera, (new_width, new_height))
+                    mask = cv2.resize(mask, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+
+                if smoothing is not None:
+                    if smoothing == 2:
+                        if prev_mask is None:
+                            prev_mask = mask.copy()
+
+                        else:
+                            cv2.addWeighted(mask, temporal_alpha, prev_mask, 1.0 - temporal_alpha, 0, smoothed_mask)
+                            prev_mask, smoothed_mask = smoothed_mask, prev_mask
+
+                        mask = prev_mask
+
+                    foreground_weight = mask
+                    np.subtract(1.0, mask, out=background_weight)
+
+                else:
+                    mask_binary = (mask > 0.1).astype(np.uint8) * 255
 
                 if bg_image is None:
-                    bg_image = np.zeros(camera.shape, dtype=np.uint8)
+                    bg_image = np.zeros((canvas_height, canvas_width, 3), dtype=np.uint8)
                     bg_image[:] = BG_COLOR
 
-                output_image = bg_image.copy()
-                t32 = time.perf_counter()
+                if args.background == "blur":
+                    blurred_frame = cv2.GaussianBlur(camera, (31, 31), 0)
+                    output_image = blurred_frame.copy()
+                    cv2.copyTo(camera, mask_binary, output_image)
 
-                roi = output_image[
-                    y:y + camera.shape[0],
-                    x:x + camera.shape[1]
-                ]
-                t33 = time.perf_counter()
+                elif args.background != "blur" or args.background is None:
+                    output_image = bg_image.copy()
+                    roi = output_image[
+                        y:y + camera.shape[0],
+                        x:x + camera.shape[1]
+                    ]
 
-                cv2.copyTo(camera, mask_binary, roi)
+                    if smoothing:
+                        blended = cv2.blendLinear(camera, roi, foreground_weight, background_weight)
+                        roi[:] = blended
 
-                t4 = time.perf_counter()
-                preprocessing_ms = (t1 - t0) * 1000
-                mediapipe_ms = (t2 - t1) * 1000
-                resize_ms = (t3 - t2) * 1000
-                composite_ms = (t4 - t3) * 1000
+                    else:
+                        cv2.copyTo(camera, mask_binary, roi)
 
-                mask_ms = (t31 - t3) * 1000
-                copy_ms = (t32 - t31) * 1000
-                roi_ms = (t33 - t32) * 1000
-                assignment_ms = (t4 - t33) * 1000
+                if args.show_fps:
+                    now = time.perf_counter()
+                    fps = 1 / (now - prev_t)
+                    prev_t = now
 
-                total_ms = (t4 - t0) * 1000
-
-                print(
-                    f"Prepocessing : {preprocessing_ms:.2f} ms\n"
-                    f"MediaPipe    : {mediapipe_ms:.2f} ms\n"
-                    f"Resize       : {resize_ms:.2f} ms\n"
-                    f"Composite    : {composite_ms:.2f} ms\n"
-                    f"    Mask     : {mask_ms:.2f} ms\n"
-                    f"    Copy     : {copy_ms:.2f} ms\n"
-                    f"    ROI      : {roi_ms:.2f} ms\n"
-                    f"    Assign   : {assignment_ms:.2f} ms\n"
-                    f"Total        : {total_ms:.2f}\n"
-                )
+                    cv2.putText(
+                        output_image,
+                        f"FPS: {int(fps)}",
+                        (30, 40),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0, 255, 0),
+                        2
+                    )
 
                 virtual_cam.stdin.write(output_image.tobytes())
-                # cv2.imshow('MediaPipe Selfie Segmentation', output_image)
+
+                if args.show_image:
+                    cv2.imshow("Camera", output_image)
+
                 if cv2.waitKey(5) & 0xFF == 27:
                     break
-
-                curr_t = time.perf_counter()
-                fps = 1 / (curr_t - prev_t)
-                prev_t = curr_t
-
-                print(f"FPS: {fps:.2f}\n\n")
 
     finally:
         cap.release()
