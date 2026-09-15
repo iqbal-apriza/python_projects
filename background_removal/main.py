@@ -103,46 +103,67 @@ def main():
 
     args = ap.parse_args()
 
+    # I/O Camera Device
     input_devices, output_devices = ch.list_cameras()
     if args.list_devices:
         ch.print_devices(input_devices, output_devices)
         return
 
-    canvas_dim = args.canvas_dim
-    if canvas_dim:
-        canvas_width, canvas_height = canvas_dim.split("x")
-
-        canvas_width = int(canvas_width)
-        canvas_height = int(canvas_height)
-
     input_dev = ch.get_video_device(input_devices, args.input_device)
     output_dev = ch.get_video_device(output_devices, args.output_device)
 
+    # Open camera
     cap = cv2.VideoCapture(input_dev)
-
     success, camera = cap.read()
+
     if not success:
         raise RuntimeError("Cannot read camera frame")
 
     cam_height, cam_width = camera.shape[:2]
 
+    # Canvas
+    canvas_width, canvas_height = map(int, args.canvas_dim.split("x"))
+
+    # Background
     bg_image = None
-    if args.background:
-        if args.background != "blur":
-            filename = args.background
-            bg_path = BASE_DIR / "backgrounds" / filename
-            bg_image = load_background(bg_path, canvas_width, canvas_height)
+    if args.background == "blur":
+        background_mode = "blur"
 
-        else:
-            bg_image = "blur"
-            canvas_width = cam_width
-            canvas_height = cam_height
+        canvas_width = cam_width
+        canvas_height = canvas_height
 
+    elif args.background:
+        background_mode = "image"
+
+        bg_path = BASE_DIR / "backgrounds" / args.background
+        bg_image = load_background(bg_path, canvas_width, canvas_height)
+
+    else:
+        background_mode = "color"
+
+    # Layer Dimension
     new_width, new_height, x, y = calculate_contain(cam_width, cam_height, canvas_width, canvas_height)
+
     print(f"\n\nCamera\t\t: {cam_width} x {cam_height}\n"
           f"Layer\t\t: {new_width} x {new_height}\n"
           f"Position\t: ({x}, {y})\n\n")
 
+    # Smoothing
+    use_smoothing = args.smoothing is not None
+    use_temporal = args.smoothing == "alpha-temporal"
+
+    background_weight = None
+    prev_mask = None
+    smoothed_mask = None
+
+    if use_smoothing:
+        background_weight = np.empty((new_height, new_width), dtype=np.float32)
+
+    if use_temporal:
+        smoothed_mask = np.empty((new_height, new_width), dtype=np.float32)
+        temporal_alpha = 0.4
+
+    # Virtual Camera FFmpeg
     virtual_cam = subprocess.Popen([
         "ffmpeg",
         "-loglevel", "error",
@@ -163,20 +184,8 @@ def main():
     try:
         if args.show_image:
             cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)
-            
+
         with mp_selfie_segmentation.SelfieSegmentation(model_selection = 1) as selfie_segmentation:
-            smoothing = None
-            if args.smoothing == "alpha":
-                smoothing = 1
-                prev_mask = None
-                background_weight = np.empty((new_height, new_width), dtype=np.float32)
-                
-            elif args.smoothing == "alpha-temporal":
-                smoothing = 2
-                prev_mask = None
-                background_weight = np.empty((new_height, new_width), dtype=np.float32)
-                smoothed_mask = np.empty((new_height, new_width), dtype=np.float32)
-                temporal_alpha = 0.4
 
             while cap.isOpened():
                 success, camera = cap.read()
@@ -193,50 +202,60 @@ def main():
                 camera = cv2.cvtColor(camera, cv2.COLOR_RGB2BGR)
                 mask = results.segmentation_mask
 
+                # Resize
+                if background_mode != "blur":
+                    camera = cv2.resize(camera, (new_width, new_height))
+                    mask = cv2.resize(mask, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+
+
                 if args.background != "blur":
                     camera = cv2.resize(camera, (new_width, new_height))
                     mask = cv2.resize(mask, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
 
-                if smoothing is not None:
-                    if smoothing == 2:
-                        if prev_mask is None:
-                            prev_mask = mask.copy()
+                # Mask Processing
+                if use_temporal:
+                    if prev_mask is None:
+                        prev_mask = mask.copy()
 
-                        else:
-                            cv2.addWeighted(mask, temporal_alpha, prev_mask, 1.0 - temporal_alpha, 0, smoothed_mask)
-                            prev_mask, smoothed_mask = smoothed_mask, prev_mask
+                    else:
+                        cv2.addWeighted(mask, temporal_alpha, prev_mask, 1.0 - temporal_alpha, 0, smoothed_mask)
+                        prev_mask, smoothed_mask = (smoothed_mask, prev_mask)
 
-                        mask = prev_mask
+                    mask = prev_mask
 
+                if use_smoothing:
                     foreground_weight = mask
                     np.subtract(1.0, mask, out=background_weight)
 
                 else:
-                    mask_binary = (mask > 0.1).astype(np.uint8) * 255
+                    mask_binary = ((mask > 0.1).astype(np.uint8) * 255)
 
-                if bg_image is None:
-                    bg_image = np.zeros((canvas_height, canvas_width, 3), dtype=np.uint8)
-                    bg_image[:] = BG_COLOR
-
-                if args.background == "blur":
+                # Output
+                if background_mode == "blur":
                     blurred_frame = cv2.GaussianBlur(camera, (31, 31), 0)
                     output_image = blurred_frame.copy()
                     cv2.copyTo(camera, mask_binary, output_image)
 
-                elif args.background != "blur" or args.background is None:
+                else:
+                    if bg_image is None:
+                        bg_image = np.zeros((canvas_height, canvas_width, 3), dtype=np.uint8)
+                        bg_image[:] = BG_COLOR
+
                     output_image = bg_image.copy()
+
                     roi = output_image[
                         y:y + camera.shape[0],
                         x:x + camera.shape[1]
                     ]
 
-                    if smoothing:
+                    if use_smoothing:
                         blended = cv2.blendLinear(camera, roi, foreground_weight, background_weight)
                         roi[:] = blended
 
                     else:
                         cv2.copyTo(camera, mask_binary, roi)
 
+                # Output
                 if args.show_fps:
                     now = time.perf_counter()
                     fps = 1 / (now - prev_t)
@@ -257,8 +276,8 @@ def main():
                 if args.show_image:
                     cv2.imshow("Camera", output_image)
 
-                if cv2.waitKey(5) & 0xFF == 27:
-                    break
+                    if cv2.waitKey(5) & 0xFF == 27:
+                        break
 
     finally:
         cap.release()
