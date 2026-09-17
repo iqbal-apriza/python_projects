@@ -1,74 +1,164 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import argparse
 
-data_in = np.array([
-    [1, 1],
-    [1, -1],
-    [-1, 1],
-    [-1, -1]
-])
+import yaml
+from pathlib import Path
 
-target = np.array([1, -1, -1, 1])
-
-alpha = 0.1
-tolerance = 0.05
+BASE_DIR = Path(__file__).resolve().parent
 
 
-def activate(val):
+def bipolar_activate(val):
     return 1 if val >= 0 else -1
 
 
-def update_bias(bias, target, output, alpha):
-    return bias + (alpha * (target - output))
+def evaluate(error):
+    err_sqrt = error**2
+    mse = np.sum(err_sqrt) / len(error)
+
+    return mse
 
 
-def update_weight(weight, target, input, output, alpha):
-    return weight + (alpha * (target - output)  * input)
+def read_yaml(yaml_file):
+    with open(yaml_file, "r") as file:
+        params = yaml.safe_load(file)
+
+    return params
+
+
+def show_data(input, target, output):
+    input_row = input.shape[0]
+    input_col = input.shape[1]
+
+    target_row = target.shape[0]
+    output_row = output.shape[0]
+
+    if input_row != target_row or input_row != output_row:
+        print("Row is not the same")
+        return
+
+    for i in range(input_col):
+        print(f"{f'Input {i+1}':>8}", end="")
+
+    print(f"{'Target':>8}", end="")
+    print(f"{'Output':>8}", end="\n")
+
+    for i in range(input_row):
+        for j in range(input_col):
+            input_round = round(input[i][j], 3)
+            print(f"{input_round:>8}", end="")
+
+        target_round = round(target[i], 3)
+        output_round = round(output[i], 3)
+
+        print(f"{target_round:>8}"
+              f"{output_round:>8}")
+
+    print("")
+
+
+class Adaline():
+    def __init__(self, num_input):
+        self.num_input = num_input
+        self.weight = np.random.uniform(low=-1.0, high=1.0, size=self.num_input)
+        self.bias = np.random.uniform(low=-1.0, high=1.0)
+
+
+    def set_weight(self, weight):
+        weight_len = weight.shape[0]
+
+        if weight_len != self.num_input:
+            raise Exception("The length of given weight does not match\n"
+                            f"Given weight length\t: {weight_len}\n"
+                            f"Expected length\t\t: {self.num_input}")
+
+        self.weight = weight
+
+
+    def set_bias(self, bias):
+        self.bias = bias
+
+
+    def train_data(self, input, activation="bipolar"):
+        self.recent_input = input
+        input_len = self.recent_input.shape[0]
+
+        if input_len != self.num_input:
+            raise Exception("The length of given input does not match\n"
+                            f"Given input length\t: {input_len}\n"
+                            f"Expected length\t\t: {self.num_input}")
+
+        sum = 0
+        for i in range(self.num_input):
+            sum += self.recent_input[i] * self.weight[i]
+
+        net = sum + self.bias
+        if activation == "bipolar":
+            net = bipolar_activate(net)
+
+        return net
+
+
+    def update_weight(self, error, alpha):
+        d_w = np.zeros(self.num_input)
+        for i in range(self.num_input):
+            new_weight = self.weight[i] + alpha * error * self.recent_input[i]
+            d_w[i] = new_weight - self.weight[i]
+            self.weight[i] = new_weight
+
+        self.bias = self.bias + alpha * error
+
+        return d_w
 
 
 def main():
+    ap = argparse.ArgumentParser(description="Python program for Adaline algorithm")
+    ap.add_argument("--dataset", required=True, type=str, help="Dataset file and config in yaml")
+    ap.add_argument("--alpha", default=0.1, type=float, help="Learning rate. The value between 0 - 1")
+    ap.add_argument("--min-err", default=0.1, type=float, help="Minimum error to stop the train")
+
+    args = ap.parse_args()
+
+    yaml_dir = BASE_DIR / args.dataset
+    yaml_data = read_yaml(yaml_dir)
+
+    data_in = np.array(yaml_data["input"])
+    target = np.array(yaml_data["target"])
+
+    alpha = yaml_data.get("alpha", args.alpha)
+    min_error = yaml_data.get("min_error", args.min_err)
+
     input_row = data_in.shape[0]
     input_col = data_in.shape[1]
 
-    weight = np.random.uniform(low=0, high=1, size=input_col)
-    bias = np.random.uniform(low=0, high=1)
-
-    epochs = 0
+    adaline = Adaline(input_col)
+    epoch = 0
 
     while True:
-        epochs += 1
-        print(f"Epoch to {epochs}")
+        epoch += 1
+        print(f"\n\n--- Epoch ke {epoch} ---")
 
-        d_w = np.zeros(input_col)
-
+        error = np.zeros(input_row)
         for i in range(input_row):
-            sum = 0
-            for j in range(input_col):
-                sum += data_in[i][j] * weight[j]
+            output = adaline.train_data(data_in[i])
+            error[i] = (target[i] - output)
 
-            sum += bias
-            output = activate(sum)
+            adaline.update_weight(error[i], alpha)
 
-            new_bias = update_bias(bias, target[i], output, alpha)
-            bias = new_bias
-            for j in range(input_col):
-                new_weight = update_weight(weight[j], target[i], data_in[i][j], output, alpha)
-                d_w[j] = new_weight - weight[j]
+        mse = evaluate(error)
+        print(f"MSE : {mse}")
 
-                print(d_w[j])
-
-                weight[j] = new_weight
-
-        print("Current Weight")
-        print(weight[0])
-        print(d_w[0])
-        print("")
-        # print(weight[1])
-        # print("")
-
-        if np.abs(d_w[0]) < tolerance:
+        if mse < min_error:
             break
+
+    print("\n\n===== FINAL RESULT =====")
+    output = np.zeros(input_row)
+    for i in range(input_row):
+        output[i] = adaline.train_data(data_in[i])
+
+    show_data(data_in, target, output)
+    print(f"Weights\t: {adaline.weight}")
+    print(f"Bias\t: {adaline.bias}")
+
 
 if __name__ == '__main__':
     main()
