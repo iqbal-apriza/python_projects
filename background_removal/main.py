@@ -100,6 +100,8 @@ def main():
     ap.add_argument("--show-debug", action="store_true")
     ap.add_argument("--show-fps", action="store_true")
     ap.add_argument("--show-image", action="store_true")
+    ap.add_argument("--threshold", default=0.5, type=float)
+    ap.add_argument("--softness", default=0.0, type=float)
 
     args = ap.parse_args()
 
@@ -118,7 +120,7 @@ def main():
 
     if not success:
         raise RuntimeError("Cannot read camera frame")
-
+    
     cam_height, cam_width = camera.shape[:2]
 
     # Canvas
@@ -130,7 +132,7 @@ def main():
         background_mode = "blur"
 
         canvas_width = cam_width
-        canvas_height = canvas_height
+        canvas_height = cam_height
 
     elif args.background:
         background_mode = "image"
@@ -162,6 +164,14 @@ def main():
     if use_temporal:
         smoothed_mask = np.empty((new_height, new_width), dtype=np.float32)
         temporal_alpha = 0.4
+
+    lower = args.threshold - args.softness / 2
+    upper = args.threshold + args.softness / 2
+
+    lower = max(0.0, lower)
+    upper = min(1.0, upper)
+
+    soft_mask = np.empty((new_height, new_width), dtype=np.float32)
 
     # Virtual Camera FFmpeg
     virtual_cam = subprocess.Popen([
@@ -207,11 +217,6 @@ def main():
                     camera = cv2.resize(camera, (new_width, new_height))
                     mask = cv2.resize(mask, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
 
-
-                if args.background != "blur":
-                    camera = cv2.resize(camera, (new_width, new_height))
-                    mask = cv2.resize(mask, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
-
                 # Mask Processing
                 if use_temporal:
                     if prev_mask is None:
@@ -223,18 +228,29 @@ def main():
 
                     mask = prev_mask
 
-                if use_smoothing:
-                    foreground_weight = mask
-                    np.subtract(1.0, mask, out=background_weight)
+                if args.softness > 0.0:
+                    np.subtract(mask, lower, out=soft_mask)
+                    soft_mask /= (upper - lower)
+                    np.clip(soft_mask, 0.0, 1.0, out=soft_mask)
 
                 else:
-                    mask_binary = ((mask > 0.1).astype(np.uint8) * 255)
+                    np.greater(mask, args.threshold, out=soft_mask)
+                    soft_mask = soft_mask.astype(np.float32, copy=False)
 
                 # Output
                 if background_mode == "blur":
                     blurred_frame = cv2.GaussianBlur(camera, (31, 31), 0)
-                    output_image = blurred_frame.copy()
-                    cv2.copyTo(camera, mask_binary, output_image)
+
+                    if args.softness > 0.0:
+                        foreground_weight = soft_mask
+                        np.subtract(1.0, foreground_weight, out=background_weight)
+
+                        output_image = cv2.blendLinear(camera, blurred_frame, foreground_weight, background_weight)
+
+                    else:
+                        mask_binary = (soft_mask * 255).astype(np.uint8)
+                        output_image = blurred_frame.copy()
+                        cv2.copyTo(camera, mask_binary, output_image)
 
                 else:
                     if bg_image is None:
@@ -248,11 +264,15 @@ def main():
                         x:x + camera.shape[1]
                     ]
 
-                    if use_smoothing:
+                    if args.softness > 0.0:
+                        foreground_weight = soft_mask
+                        np.subtract(1.0, foreground_weight, out=background_weight)
                         blended = cv2.blendLinear(camera, roi, foreground_weight, background_weight)
+
                         roi[:] = blended
 
                     else:
+                        mask_binary = (soft_mask * 255).astype(np.uint8)
                         cv2.copyTo(camera, mask_binary, roi)
 
                 # Output
