@@ -91,21 +91,27 @@ class Adaline():
         for i in range(self.num_input):
             sum += self.recent_input[i] * self.weight[i]
 
-        net = sum + self.bias
+        self.__recent_output = sum + self.bias
         if activation == "bipolar":
-            net = bipolar_activate(net)
+            net = bipolar_activate(self.__recent_output)
 
         return net
 
 
-    def update_weight(self, error, alpha):
+    def update_weight(self, target, alpha):
+        if self.__recent_output is None:
+            raise RuntimeError(f"Recent output is empty. Please train the data first")
+
+        if self.recent_input is None:
+            raise RuntimeError(f"Recent input is empty. Please train the data first")
+
         d_w = np.zeros(self.num_input)
         for i in range(self.num_input):
-            new_weight = self.weight[i] + alpha * error * self.recent_input[i]
+            new_weight = self.weight[i] + alpha * (target - self.__recent_output) * self.recent_input[i]
             d_w[i] = new_weight - self.weight[i]
             self.weight[i] = new_weight
 
-        self.bias = self.bias + alpha * error
+        self.bias = self.bias + alpha * (target - self.__recent_output)
 
         return d_w
 
@@ -142,7 +148,7 @@ def main():
             output = adaline.train_data(data_in[i])
             error[i] = (target[i] - output)
 
-            adaline.update_weight(error[i], alpha)
+            adaline.update_weight(target[i], alpha)
 
         mse = evaluate(error)
         print(f"MSE : {mse}")
