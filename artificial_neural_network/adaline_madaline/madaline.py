@@ -76,10 +76,14 @@ class Madaline():
 
 
 def main():
-    data_in = np.array([[1.0, 1.0, 1.0], [1.0, -1.0, 1.0],
-              [-1.0, 1.0, 1.0], [-1.0, -1.0, -1.0]])
+    data_in = np.array([
+        [1, 1],
+        [1, -1],
+        [-1, 1],
+        [-1, -1]
+    ])
 
-    target = np.array([1, 1, 1, -1])
+    target = np.array([-1, 1, 1, -1])
 
     input_row = data_in.shape[0]
     input_col = data_in.shape[1]
@@ -90,24 +94,24 @@ def main():
     hidden_layer = Madaline(num_neurons[0], input_col, 0)
     output_layer = Madaline(num_neurons[1], num_neurons[0], 1)
 
-    # weight_w = np.array([
-    #     [0.05, 0.2],
-    #     [0.1, 0.2]
-    # ])
+    weight_w = np.array([
+        [-0.30715648, 0.2209582],
+        [0.44151396, -0.1058249]
+    ])
 
-    # bias_w = np.array([0.3, 0.15])
+    bias_w = np.array([-0.06663228, -0.01719245])
 
-    # hidden_layer.set_weights(weight_w)
-    # hidden_layer.set_biases(bias_w)
+    hidden_layer.set_weights(weight_w)
+    hidden_layer.set_biases(bias_w)
 
-    # weight_v = np.array([
-    #     [0.5, 0.5]
-    # ])
+    weight_v = np.array([
+        [-0.39990655, 0.14156771]
+    ])
 
-    # bias_v = np.array([0.5])
+    bias_v = np.array([0.09838382])
 
-    # output_layer.set_weights(weight_v)
-    # output_layer.set_biases(bias_v)
+    output_layer.set_weights(weight_v)
+    output_layer.set_biases(bias_v)
 
     epochs = 0
 
@@ -126,9 +130,11 @@ def main():
 
             hidden_layer.update_weights(target[i], 0.0001)
 
-        print(f"Errors: {error}", end="\n\n")
-        
-        if epochs >= 3:
+        print(f"Errors: {error}")
+
+        mse = ad.evaluate(error)
+        print(f"MSE   : {mse}", end="\n\n")
+        if mse < 0.01:
             break
 
     print(hidden_layer.get_info())
