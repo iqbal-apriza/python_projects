@@ -23,6 +23,7 @@ More projects will be added as the repository develops
     │   ├── docs
     │   ├── hebb_rule
     │   ├── kohonen
+    │   ├── learning_vector_quantization
     │   ├── perceptron
     │   └── rainfall_forecasting
     |
