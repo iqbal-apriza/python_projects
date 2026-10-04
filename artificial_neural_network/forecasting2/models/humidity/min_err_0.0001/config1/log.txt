@@ -1,0 +1,21 @@
+==================================================
+                 TRAINING INFO
+==================================================
+Network Architecture
+
+Number of Layers        : 2
+Number of Neurons       : [6 1]
+--------------------------------------------------
+Hyperparameters
+
+Learning Rate           : 0.5
+Momentum                : 0.0
+Nguyen-Widrow           : False
+Max Epoch               : False
+Min Error               : 0.0001
+--------------------------------------------------
+Training Info
+
+Stop Epochs             : 7882
+Mean Squared Errors     : 9.994395328510008e-05
+--------------------------------------------------
