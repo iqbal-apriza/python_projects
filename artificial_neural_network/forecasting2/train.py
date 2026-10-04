@@ -53,7 +53,7 @@ def main():
     ap.add_argument('--dataset', type=str, required=True, help='Dataset file in csv')
     ap.add_argument('--config', type=str, required=True, help='Config file for ann architecture in yaml')
     ap.add_argument('--export-dir', type=str, help='Directory for exporting the weights and biases')
-    ap.add_argument('--max-epoch', type=float, help='Maximum epochs to train. If set, it uses this setup, otherwise it use in the yaml config')
+    ap.add_argument('--max-epoch', type=int, help='Maximum epochs to train. If set, it uses this setup, otherwise it use in the yaml config')
     ap.add_argument('--min-error', type=float, help='Minimum error to train. If set, it uses this setup, otherwise it use in the yaml config')
 
     args = ap.parse_args()
