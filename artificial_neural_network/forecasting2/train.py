@@ -53,6 +53,8 @@ def main():
     ap.add_argument('--dataset', type=str, required=True, help='Dataset file in csv')
     ap.add_argument('--config', type=str, required=True, help='Config file for ann architecture in yaml')
     ap.add_argument('--export-dir', type=str, help='Directory for exporting the weights and biases')
+    ap.add_argument('--max-epoch', type=float, help='Maximum epochs to train. If set, it uses this setup, otherwise it use in the yaml config')
+    ap.add_argument('--min-error', type=float, help='Minimum error to train. If set, it uses this setup, otherwise it use in the yaml config')
 
     args = ap.parse_args()
 
@@ -69,8 +71,15 @@ def main():
 
     alpha = yaml_data.get('alpha', 0.1)
     mu = yaml_data.get('mu', 0.0)
+    
     min_error = yaml_data.get('min_error', False)
     max_epoch = yaml_data.get('max_epoch', False)
+
+    if args.min_error is not None:
+        min_error = args.min_error
+
+    if args.max_epoch is not None:
+        max_epoch = args.max_epoch
 
     num_layer = yaml_data['num_layer']
     num_neurons = np.array(yaml_data['num_neurons'])
@@ -157,6 +166,8 @@ def main():
 
             if stop_train:
                 last_mse = mse
+                epochs_acc.append(epochs)
+                mse_acc.append(mse)
                 break
             else:
                 if bp.is_save(epochs):
@@ -198,6 +209,10 @@ def main():
     plt.grid(True)
     plt.xlabel("Epoch")
     plt.ylabel("MSE")
+
+    if args.export_dir is not None:
+        file_dir = export_dir / 'train_err.png'
+        plt.savefig(file_dir)
 
     plt.show()
 
