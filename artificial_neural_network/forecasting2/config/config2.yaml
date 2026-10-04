@@ -1,0 +1,5 @@
+alpha: 0.5
+max_epoch: 100000
+num_layer: 2
+num_neurons: [6, 1]
+mu: 0.3
