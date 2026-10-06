@@ -38,8 +38,11 @@ class Dataset():
         return left, right
 
 
-    def append_column(self, col_name, data):
-        self.df[col_name] = data
+    def append_column(self, col_name, data, position=None):
+        if position is None:
+            position = len(self.df.columns)
+
+        self.df.insert(position, col_name, data)
 
 
 def main():
@@ -100,9 +103,46 @@ def main():
     data_denorm = denormalize_data(output, data.min, data.max)
     data_denorm = np.round(data_denorm, 1)
 
+    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     data.append_column(col_name='2006', data=data_denorm)
+    data.append_column(col_name='Mth/Yr', data=months, position=0)
 
+    data_name = dataset_dir.stem
+
+    title = ''
+    unit = ''
+
+    if data_name == 'rainfall':
+        title = 'Rainfall'
+        unit = '(mm/day)'
+
+    elif data_name == 'temp':
+        title = 'Temperature'
+        unit = '(C)'
+
+    elif data_name == 'humidity':
+        title = 'Humidity'
+        unit = '(%)'
+    
+    print(f'\n\n----- {title} Forecasting {unit} for 2006 -----\n')
     print(data.df)
+
+    fig, ax = plt.subplots()
+
+    ax.set_title(f'{title} Forecasting for 2006')
+
+    for i in range(data.df_np.shape[1]):
+        ax.plot(months, data.df_np[:, i], alpha=0.5, linestyle=':', label=f'{1997+i}')
+
+    ax.plot(months, data_denorm, linewidth=3, marker='o', color='green', label='2006')
+    ax.grid()
+    ax.legend()
+
+    ax.set_xlabel('Months')
+    ax.set_ylabel(f'{title} {unit}')
+
+    plt.show()
+
     
 
 if __name__ == '__main__':
