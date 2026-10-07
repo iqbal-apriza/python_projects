@@ -59,6 +59,12 @@ def main():
     print(f"Weights\t: {weights}\n"
           f"Bias\t: {bias}\n")
 
+    print("--- Equation ---")
+    print("y = ", end="")
+    for i in range(data_col):
+        print(f"{weights[i]}x{i} + ", end='')
+    print(f"{bias}", end='\n\n')
+
     print(f"{'Input 1':>8}{'Input 2':>8}{'Target':>8}{'Output':>8}")
     result = np.zeros(data_row)
     for i in range(data_row):
