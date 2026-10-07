@@ -5,15 +5,6 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# data_in = np.array([
-#     [0, 0],
-#     [0, 1],
-#     [1, 0],
-#     [1, 1]
-# ])
-
-# target = np.array([0, 1, 1, 1])
-
 
 def read_yaml(yaml_file):
     with open(yaml_file, "r") as file:
