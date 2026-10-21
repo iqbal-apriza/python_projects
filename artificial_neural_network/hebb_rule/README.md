@@ -13,6 +13,15 @@ Hebbian Learning Rule, also known as Hebb Learning Rule, was proposed by Donald 
 </p>
 
 ## Getting Started
+This project will implement the Hebb Rule Algorithm to train the AND data. The data input and target will be
+
+|Input 1 (x1)|Input 2 (x2)|Target (y)|
+|---|---|---|
+|0|0|0|
+|0|1|0|
+|1|0|0|
+|1|1|1|
+
 To run the algorithm, run the command as shown
 
     $ python hebb_rule.py
