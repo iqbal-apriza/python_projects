@@ -27,6 +27,10 @@ More projects will be added as the repository develops
     │   ├── perceptron
     │   └── rainfall_forecasting
     |
+    ├── audio_project
+    │   ├── audio_capture.py
+    │   └── test.py
+    |
     ├── background_removal
     │   ├── backgrounds
     │   ├── camera_handler.py
@@ -38,7 +42,10 @@ More projects will be added as the repository develops
     |
     ├── pattern_recognition
     │   ├── principal_component_analysis
-    │   └── project_2
+    │   └── transform
+    |
+    ├── system_monitoring
+    |   └── main.py
     |
     └── README.md
 
