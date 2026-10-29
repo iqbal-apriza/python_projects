@@ -7,8 +7,10 @@ This repository contains various projects developed while exploring Python for p
 | Project Name | Description |
 | --- | --- |
 | Artificial Neural Network | Projects and coursework developed for the Artificial Neural Networks course. |
+| Audio Project | Projects and experiments related to audio
 | Pattern Recognition | Projects and coursework developed for the Pattern Recognition course. |
 | Background Removal | A real-time background removal and virtual background application designed for video conferencing and online meetings. |
+| System Monitoring | A real-time PC performance monitoring that monitor CPU, RAM, GPU, and CPU temperature
 
 More projects will be added as the repository develops
 
