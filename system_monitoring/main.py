@@ -1,6 +1,7 @@
 import sys
 import arduino as ad
 import argparse
+import serial
 
 if sys.platform == "win32":
     import windows as mon
@@ -41,6 +42,9 @@ def main():
 
     except KeyboardInterrupt:
         print("\nMonitoring stopped")
+
+    except serial.SerialException:
+        print("\nArduino disconnected. Monitoring stopped")
 
     finally:
         gpu.cleanup()
