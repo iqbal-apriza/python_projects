@@ -1,5 +1,6 @@
 import sys
 import arduino as ad
+import argparse
 
 if sys.platform == "win32":
     import windows as mon
@@ -7,16 +8,22 @@ if sys.platform == "win32":
 elif sys.platform == "linux":
     import linux as mon
 
-
-PORT    = "COM5"
+PORT    = "/dev/ttyUSB0"
 BAUD    = 115200
 
 def main():
+    ap = argparse.ArgumentParser(description="Simple program to monitoring the CPU, RAM, GPU, and CPU temperature to Arduino LCD")
+    ap.add_argument("--port", type=str, required=True, help="Arduino port")
+
+    args = ap.parse_args()
+
+    arduino_port = args.port
+
     cpu = mon.CPU()
     gpu = mon.GPU()
     temp = mon.Temperature()
 
-    arduino = ad.Arduino(PORT, BAUD)
+    arduino = ad.Arduino(arduino_port, BAUD)
     arduino.handshake()
 
     try:
