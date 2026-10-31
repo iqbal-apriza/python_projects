@@ -1,6 +1,7 @@
 import subprocess
 import numpy as np
 import time
+import argparse
 
 SOURCE          = "alsa_output.usb-C-Media_Electronics_Inc._USB_Audio_Device-00.analog-stereo.monitor"
 BUFFER_SIZE     = 2048
@@ -21,8 +22,11 @@ COLOR_GREEN     = "\033[32m"
 COLOR_YELLOW    = "\033[33m"
 COLOR_RED       = "\033[31m"
 
+# MEASURE_MODE    = "linear"
+
 def mapping(x, in_min, in_max, out_min, out_max):
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
 
 def rms(val):
     data_len = len(val)
@@ -30,37 +34,64 @@ def rms(val):
 
     return np.sqrt(np.sum(val_sqr) / data_len)
 
-def render_terminal(val_l, val_r):
-    bar_l = np.round(mapping(val_l, CUTOFF_DB, 0, 0, MAX_BAR)).astype(int)
-    bar_r = np.round(mapping(val_r, CUTOFF_DB, 0, 0, MAX_BAR)).astype(int)
+
+def render_terminal(val_l, val_r, mode):
+    peak_l = " "
+    peak_r = " "
+    
+    if mode == "decibel":
+        bar_l = np.round(mapping(val_l, CUTOFF_DB, 0, 0, MAX_BAR)).astype(int)
+        bar_r = np.round(mapping(val_r, CUTOFF_DB, 0, 0, MAX_BAR)).astype(int)
+
+        if val_l >= 0:
+            peak_l = "\033[31m#\033[0m"
+
+        if val_r >= 0:
+            peak_r = "\033[31m#\033[0m"
+
+        sl, vl = ("-", abs(val_l)) if val_l < 0 else (" ", val_l)
+        sr, vr = ("-", abs(val_r)) if val_r < 0 else (" ", val_r)
+
+        unit = "dB"
+
+    if mode == "linear":
+        bar_l = np.round(mapping(val_l, 0, 1, 0, MAX_BAR)).astype(int)
+        bar_r = np.round(mapping(val_r, 0, 1, 0, MAX_BAR)).astype(int)
+
+        if val_l >= 1.0:
+            peak_l = "\033[31m#\033[0m"
+
+        if val_r >= 1.0:
+            peak_r = "\033[31m#\033[0m"
+
+        vl = val_l
+        vr = val_r
+
+        sl = sr = ''
+        unit = ''
 
     show_bar_l = BAR_CHAR * int(bar_l)
     show_bar_r = BAR_CHAR * int(bar_r)
 
-    peak_l = " "
-    peak_r = " "
-
-    if val_l >= 0:
-        peak_l = "\033[31m#\033[0m"
-
-    if val_r >= 0:
-        peak_r = "\033[31m#\033[0m"
-
-    sl, vl = ("-", abs(val_l)) if val_l < 0 else (" ", val_l)
-    sr, vr = ("-", abs(val_r)) if val_r < 0 else (" ", val_r)
-
     print(
         f"{CURSOR_HOME}"
         f"Sound Device\t: {SOURCE}\n"
-        f"Audio L\t\t: {sl}{vl:4.1f} dB{CLEAR_LINE}\n"
-        f"Audio R\t\t: {sr}{vr:4.1f} dB{CLEAR_LINE}\n\n"
+        f"Audio L\t\t: {sl}{vl:4.2f} {unit}{CLEAR_LINE}\n"
+        f"Audio R\t\t: {sr}{vr:4.2f} {unit}{CLEAR_LINE}\n\n"
         f"L: {BAR_PLACE}{peak_l}\r"
         f"L: {show_bar_l}\n"
         f"R: {BAR_PLACE}{peak_r}\r"
         f"R: {show_bar_r}\n"
     )
 
+
 def main():
+    ap = argparse.ArgumentParser(description="Python program for capturing system audio and show it in VU")
+    ap.add_argument("-m", type=str, default="decibel", help="Measuring mode. Available mode 'linear' and 'decibel'")
+
+    args = ap.parse_args()
+    measure_mode = args.m
+
     audio_l = 0.0
     audio_r = 0.0
 
@@ -137,10 +168,15 @@ def main():
                 if audio_r < lower_val:
                     audio_r = lower_val
 
-                log_l = 20 * np.log10(audio_l)
-                log_r = 20 * np.log10(audio_r)
+                if measure_mode == "linear":
+                    term_l = audio_l
+                    term_r = audio_r
+
+                if measure_mode == "decibel":
+                    term_l = 20 * np.log10(audio_l)
+                    term_r = 20 * np.log10(audio_r)
                 
-                render_terminal(log_l, log_r)
+                render_terminal(term_l, term_r, measure_mode)
 
                 prev_time = now
                 max_l = 0.0
