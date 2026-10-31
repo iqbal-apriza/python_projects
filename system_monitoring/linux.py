@@ -30,8 +30,8 @@ class Temperature:
                 continue
 
 
-    def read_temp(self, chip_name):
-        dir = self.chip_dir[chip_name]
+    def read_temp(self):
+        dir = self.chip_dir[CPU_TEMP_NAME]
         temps = []
 
         for input_file in dir.glob("temp*_input"):
@@ -50,7 +50,7 @@ class CPU:
         self.read_cpu()
 
     def read_cpu(self):
-        psutil.cpu_percent(interval=None)
+        return psutil.cpu_percent(interval=None)
 
     def cleanup(self):
         pass
@@ -59,7 +59,6 @@ class CPU:
 class GPU:
     def __init__(self):
         self.dir = DRM_PATH / "card1" / "device" / "gpu_busy_percent"
-
 
     def read_gpu(self):
         return int(self.dir.read_text().strip())
