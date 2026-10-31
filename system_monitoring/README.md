@@ -15,7 +15,7 @@ Please see also the [Arduino Program](https://github.com/iqbal-apriza/arduino-pr
 - `psutil`
 - `pyserial`
 - `pathlib`
-- `win32pdh` (For Windows)
+- `pywin32` (For Windows)
 
 ## Running the Program
 After clone the repository, make sure the workspace has a file as shown
